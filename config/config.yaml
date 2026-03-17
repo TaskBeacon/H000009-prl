@@ -1,0 +1,236 @@
+# ============================================================================
+# Base config (human run)
+# - Used by: python main.py
+# - Scope: human experiment only (no qa/sim section in this file)
+# ============================================================================
+
+# === Subject Form ===========================================================
+subinfo_fields:
+  - name: subject_id
+    type: int
+    constraints:
+      min: 101
+      max: 999
+      digits: 3
+  - name: subname
+    type: string
+  - name: age
+    type: int
+    constraints:
+      min: 5
+      max: 60
+  - name: gender
+    type: choice
+    choices:
+      - Male
+      - Female
+
+# === Subject Mapping ========================================================
+subinfo_mapping:
+  subject_id: 被试号
+  subname: 被试姓名(拼音)
+  age: 年龄
+  gender: 性别
+  Male: 男
+  Female: 女
+  registration_failed: 注册失败。
+  registration_successful: 注册成功！
+  invalid_input: "字段 {field} 输入无效"
+
+# === Display / Window =======================================================
+window:
+  size:
+    - 1920
+    - 1080
+  units: deg
+  screen: 0
+  bg_color: gray
+  fullscreen: true
+  fullscreen_lock_escape: true
+  monitor_width_cm: 60
+  monitor_distance_cm: 72
+
+# === Task ===================================================================
+task:
+  task_name: eeg_prl_preview
+  language: Chinese
+  voice_name: zh-CN-YunyangNeural
+  voice_enabled: true
+  total_blocks: 2
+  total_trials: 80
+  trial_per_block: 40
+  conditions:
+    - AB
+    - BA
+  key_list:
+    - f
+    - j
+  left_key: f
+  right_key: j
+  delta: 10
+  seed_mode: same_across_sub
+  overall_seed: 2025
+  input_mode: keyboard
+  hide_cursor: true
+  force_quit_enabled: true
+  force_quit_shortcut: ctrl+q
+
+# === Stimuli ================================================================
+stimuli:
+  fixation:
+    type: text
+    text: "+"
+    color: white
+
+  win_feedback:
+    type: text
+    text: "+10分"
+    color: white
+
+  lose_feedback:
+    type: text
+    text: "-10分"
+    color: white
+
+  no_response_feedback:
+    type: text
+    text: "未反应：-10分"
+    color: white
+
+  blank:
+    type: text
+    text: ""
+    color: white
+
+  stima:
+    type: image
+    image: ./assets/nushu_stroke5_000_U1B1A8.png
+    size:
+      - 5
+      - 5
+
+  stimb:
+    type: image
+    image: ./assets/nushu_stroke5_002_U1B1AA.png
+    size:
+      - 5
+      - 5
+
+  highlight_left:
+    type: rect
+    lineColor: white
+    lineWidth: 3
+    fillColor: null
+    pos:
+      - -4
+      - -0.3
+    width: 3
+    height: 4
+
+  highlight_right:
+    type: rect
+    lineColor: white
+    lineWidth: 3
+    fillColor: null
+    pos:
+      - 4
+      - -0.3
+    width: 3
+    height: 4
+
+  block_break:
+    type: text
+    text: |
+      得分：{score} 分
+
+      请在充分休息后按下空格键
+      进入下一个部分
+    color: white
+    height: 0.78
+
+  instruction_text:
+    type: textbox
+    text: |
+      【奖赏学习任务】
+
+      在本任务中，您将看到屏幕上同时出现两个图形。
+
+      左手食指按下【F】键选择左侧图形；
+      右手食指按下【J】键选择右侧图形。
+
+      每个图形都有一定的获胜概率：
+      一开始，某一图形的获胜概率较高；
+      但随着任务进行，图形的获胜概率可能发生变化。
+
+      您的目标是根据反馈信息持续调整策略，
+      尽可能选择当前更可能获胜的图形以获得更多分数。
+
+      准备好后，请按【空格键】开始任务。
+    color: white
+    font: SimHei
+    alignment: center
+    letterHeight: 0.78
+    units: deg
+    size:
+      - 20
+      - 5
+
+  good_bye:
+    type: text
+    text: |
+      【任务结束】
+      最终得分：{total_score} 分
+      感谢您的参与！
+      请按【空格键】退出任务。
+    color: white
+    font: SimHei
+
+# === Timing =================================================================
+timing:
+  fixation_duration:
+    - 0.6
+    - 0.8
+  choice_duration: 1.5
+  feedback_duration: 0.8
+  blank_duration:
+    - 0.4
+    - 0.6
+
+# === Triggers ===============================================================
+triggers:
+  map:
+    exp_onset: 98
+    exp_end: 99
+    block_onset: 100
+    block_end: 101
+    fixation_onset: 1
+    choice_onset: 2
+    key_press: 3
+    no_response: 4
+    win_feedback_onset: 5
+    lose_feedback_onset: 6
+    no_response_feedback_onset: 7
+
+  driver:
+    type: serial_url
+    url: loop://
+    baudrate: 115200
+    timeout: 1
+    prefix:
+      - 1
+      - 225
+      - 1
+      - 0
+
+  policy:
+    strict: false
+
+  timing:
+    post_delay_s: 0.001
+
+# === Controller =============================================================
+controller:
+  win_prob: 0.8
+  rev_win_prob: 0.9
+  sliding_window: 10
+  sliding_window_hits: 9
