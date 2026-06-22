@@ -56,8 +56,8 @@ task:
   language: Chinese
   voice_name: zh-CN-YunyangNeural
   voice_enabled: true
-  total_blocks: 2
-  total_trials: 80
+  total_blocks: 6
+  total_trials: 240
   trial_per_block: 40
   conditions:
     - AB
