@@ -1,4 +1,4 @@
-import type { ReducedTrialRow } from "psyflow-web";
+import { PythonRandom, type ReducedTrialRow } from "psyflow-web";
 
 export interface AssetEntry {
   name: string;
@@ -8,6 +8,36 @@ export interface AssetEntry {
 export interface StimPair {
   stima: AssetEntry;
   stimb: AssetEntry;
+}
+
+function conditionHash(condition: string): number {
+  return Array.from(condition).reduce((sum, char, index) => sum + (index + 1) * char.charCodeAt(0), 0);
+}
+
+export function sample_reward_draw(
+  settings: { block_seed?: unknown },
+  condition: string,
+  blockIdx: number | null | undefined,
+  trialId: number,
+  reversalCount: number
+): { rand_val: number; reward_seed: number } {
+  const blockIndex = Math.trunc(Number(blockIdx ?? 0));
+  let blockSeed = 0;
+  const blockSeeds = Array.isArray(settings.block_seed) ? settings.block_seed : [];
+  const seedValue = blockSeeds[blockIndex];
+  if (seedValue != null) {
+    blockSeed = Math.trunc(Number(seedValue));
+  }
+
+  const rewardSeed =
+    blockSeed +
+    conditionHash(String(condition)) +
+    Math.trunc(Number(trialId)) * 1009 +
+    Math.trunc(Number(reversalCount)) * 100003;
+  return {
+    rand_val: new PythonRandom(rewardSeed).random(),
+    reward_seed: rewardSeed
+  };
 }
 
 function basename(pathLike: string): string {

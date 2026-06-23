@@ -7,7 +7,7 @@ import {
 } from "psyflow-web";
 
 import type { Controller } from "./controller";
-import type { StimPair } from "./utils";
+import { sample_reward_draw, type StimPair } from "./utils";
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) {
@@ -35,6 +35,29 @@ function resolveDelta(outcome: string, baseDelta: number): number {
   return outcome === "win" ? baseDelta : -baseDelta;
 }
 
+function resolveCorrectSide(conditionId: string, currentCorrect: "stima" | "stimb"): "left" | "right" {
+  if (currentCorrect === "stima") {
+    return conditionId === "AB" ? "left" : "right";
+  }
+  return conditionId === "BA" ? "left" : "right";
+}
+
+function resolveChoiceHit(
+  snapshot: TrialSnapshot,
+  conditionId: string,
+  currentCorrect: "stima" | "stimb",
+  leftKey: string,
+  rightKey: string
+): boolean {
+  const response = String(snapshot.units.choice?.key_press ?? "");
+  if (!response) {
+    return false;
+  }
+  const correctSide = resolveCorrectSide(conditionId, currentCorrect);
+  const correctKey = correctSide === "left" ? leftKey : rightKey;
+  return response === correctKey;
+}
+
 export function run_trial(
   trial: TrialBuilder,
   condition: string,
@@ -53,6 +76,8 @@ export function run_trial(
   const left_key = String(settings.left_key ?? "f");
   const right_key = String(settings.right_key ?? "j");
   const delta = Number(settings.delta ?? 10);
+  const triggerMap = (settings.triggers ?? {}) as Record<string, unknown>;
+  const markerPad = () => controller.reversal_count * 10;
 
   const fixationUnit = trial.unit("fixation").addStim(stimBank.get("fixation"));
   set_trial_context(fixationUnit, {
@@ -90,14 +115,6 @@ export function run_trial(
   const leftStim = condition_id === "AB" ? stimaLeft : stimbLeft;
   const rightStim = condition_id === "AB" ? stimbRight : stimaRight;
 
-  let correct_side: "left" | "right";
-  if (controller.current_correct === "stima") {
-    correct_side = condition_id === "AB" ? "left" : "right";
-  } else {
-    correct_side = condition_id === "BA" ? "left" : "right";
-  }
-  const correct_key = correct_side === "left" ? left_key : right_key;
-
   const choiceUnit = trial.unit("choice").addStim(leftStim).addStim(rightStim);
   set_trial_context(choiceUnit, {
     trial_id: trial.trial_id,
@@ -109,8 +126,8 @@ export function run_trial(
     task_factors: {
       condition: condition_id,
       stage: "choice_response_window",
-      current_correct: controller.current_correct,
-      reversal_count: controller.reversal_count,
+      current_correct: () => controller.current_correct,
+      reversal_count: () => controller.reversal_count,
       block_idx
     },
     stim_id: "choice_pair"
@@ -118,17 +135,43 @@ export function run_trial(
   choiceUnit
     .captureResponse({
       keys: key_list,
-      correct_keys: correct_key,
+      correct_keys: () => {
+        const correctSide = resolveCorrectSide(condition_id, controller.current_correct);
+        return correctSide === "left" ? left_key : right_key;
+      },
       duration: Number(settings.choice_duration ?? 1.5),
+      response_trigger: () => Number(triggerMap.key_press ?? 3) + markerPad(),
+      timeout_trigger: () => Number(triggerMap.no_response ?? 4) + markerPad(),
       terminate_on_response: false
     })
     .set_state({
       win_prob: () => controller.get_win_prob(),
-      rand_val: (snapshot: TrialSnapshot) => (Boolean(snapshot.units.choice?.key_press) ? Math.random() : null),
+      choice_hit: (snapshot: TrialSnapshot) =>
+        resolveChoiceHit(snapshot, condition_id, controller.current_correct, left_key, right_key),
+      rand_val: (snapshot: TrialSnapshot) =>
+        Boolean(snapshot.units.choice?.key_press)
+          ? sample_reward_draw(
+              settings,
+              condition_id,
+              block_idx,
+              Number(trial.trial_id),
+              controller.reversal_count
+            ).rand_val
+          : null,
+      reward_seed: (snapshot: TrialSnapshot) =>
+        Boolean(snapshot.units.choice?.key_press)
+          ? sample_reward_draw(
+              settings,
+              condition_id,
+              block_idx,
+              Number(trial.trial_id),
+              controller.reversal_count
+            ).reward_seed
+          : null,
       outcome: (snapshot: TrialSnapshot) =>
         resolveOutcome(
           Boolean(snapshot.units.choice?.key_press),
-          Boolean(snapshot.units.choice?.hit),
+          Boolean(snapshot.units.choice?.choice_hit),
           Number(snapshot.units.choice?.win_prob ?? controller.get_win_prob()),
           snapshot.units.choice?.rand_val
         ),
@@ -142,14 +185,21 @@ export function run_trial(
   const blankUnit = trial.unit("blank").addStim(stimBank.get("blank"));
   set_trial_context(blankUnit, {
     trial_id: trial.trial_id,
-    phase: "pre_feedback_blank",
+    phase: "blank_screen",
     deadline_s: (settings.blank_duration as number | number[] | null | undefined) ?? null,
-    valid_keys: [...key_list],
+    valid_keys: [],
     block_id,
     condition_id,
     task_factors: {
       condition: condition_id,
-      stage: "pre_feedback_blank",
+      stage: "blank_screen",
+      current_correct: () => controller.current_correct,
+      reversal_count: () => controller.reversal_count,
+      outcome: (snapshot: TrialSnapshot) => snapshot.units.choice?.outcome,
+      hit: (snapshot: TrialSnapshot) => Boolean(snapshot.units.choice?.choice_hit),
+      win_prob: (snapshot: TrialSnapshot) => snapshot.units.choice?.win_prob,
+      rand_val: (snapshot: TrialSnapshot) => snapshot.units.choice?.rand_val,
+      reward_seed: (snapshot: TrialSnapshot) => snapshot.units.choice?.reward_seed,
       block_idx
     },
     stim_id: "blank"
@@ -163,22 +213,30 @@ export function run_trial(
     );
   set_trial_context(feedbackUnit, {
     trial_id: trial.trial_id,
-    phase: "outcome_feedback",
+    phase: "feedback",
     deadline_s: Number(settings.feedback_duration ?? 0.8),
-    valid_keys: [...key_list],
+    valid_keys: [],
     block_id,
     condition_id,
     task_factors: {
       condition: condition_id,
-      stage: "outcome_feedback",
+      stage: "feedback",
+      current_correct: () => controller.current_correct,
+      reversal_count: () => controller.reversal_count,
+      outcome: (snapshot: TrialSnapshot) => snapshot.units.choice?.outcome,
+      hit: (snapshot: TrialSnapshot) => Boolean(snapshot.units.choice?.choice_hit),
+      win_prob: (snapshot: TrialSnapshot) => snapshot.units.choice?.win_prob,
+      rand_val: (snapshot: TrialSnapshot) => snapshot.units.choice?.rand_val,
+      reward_seed: (snapshot: TrialSnapshot) => snapshot.units.choice?.reward_seed,
       block_idx
-    }
+    },
+    stim_id: "feedback"
   });
   feedbackUnit.show({ duration: Number(settings.feedback_duration ?? 0.8) }).to_dict();
 
   trial.finalize((snapshot, _runtime, helpers) => {
     const responded = Boolean(snapshot.units.choice?.key_press);
-    const hit = responded ? Boolean(snapshot.units.choice?.hit) : false;
+    const hit = responded ? Boolean(snapshot.units.choice?.choice_hit) : false;
     controller.update(hit);
     helpers.setTrialState("choice_delta", Number(snapshot.units.choice?.delta ?? -delta));
     helpers.setTrialState("choice_outcome", String(snapshot.units.choice?.outcome ?? "no_response"));
